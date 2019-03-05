@@ -131,14 +131,15 @@ type Type struct {
 
 // ForeignKey is a template item for a foreign relationship on a table.
 type ForeignKey struct {
-	Name       string
-	Schema     string
-	Type       *Type
-	Field      *Field
-	RefType    *Type
-	RefField   *Field
-	ForeignKey *models.ForeignKey
-	Comment    string
+	Name                 string
+	Schema               string
+	Type                 *Type
+	Field                *Field
+	RefType              *Type
+	RefField             *Field
+	ForeignKey           *models.ForeignKey
+	ForeignKeysForSelect []*Field
+	Comment              string
 }
 
 // Index is a template item for a index into a table.

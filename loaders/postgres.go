@@ -6,12 +6,10 @@ import (
 	"strconv"
 	"strings"
 
-	_ "github.com/lib/pq"
-
-	"github.com/knq/snaker"
-
 	"github.com/xo/xo/internal"
 	"github.com/xo/xo/models"
+	"github.com/knq/snaker"
+	_ "github.com/lib/pq"
 )
 
 func init() {
@@ -270,13 +268,32 @@ func PgTables(db models.XODB, schema string, relkind string) ([]*models.Table, e
 func PgQueryColumns(args *internal.ArgType, inspect []string) ([]*models.Column, error) {
 	var err error
 
+	if args.QueryForTable != "" {
+		columns, err := models.PgTableColumns(args.DB, args.Schema, args.QueryForTable, false)
+		if err != nil {
+			return nil, err
+		}
+
+		selectq := strings.Join(inspect, fmt.Sprint("\n"))
+		_, err = args.DB.Exec(selectq)
+		if err != nil {
+			// we can't test real insert/update query as we almost all the time dont have expected relations
+			if strings.Contains(err.Error(), "violates not-null constraint") {
+				return columns, nil
+			}
+			return nil, fmt.Errorf("Error '%s' when: %s", err.Error(), selectq)
+		}
+
+		return columns, nil
+	}
+
 	// create temporary view xoid
 	xoid := "_xo_" + internal.GenRandomID()
-	viewq := `CREATE TEMPORARY VIEW ` + xoid + ` AS (` + strings.Join(inspect, "\n") + `)`
+	viewq := `CREATE TEMPORARY VIEW ` + xoid + ` AS (` + strings.Join(inspect, fmt.Sprint("\n")) + `)`
 	models.XOLog(viewq)
 	_, err = args.DB.Exec(viewq)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Error '%s' when: %s", err.Error(), viewq)
 	}
 
 	// query to determine schema name where temporary view was created

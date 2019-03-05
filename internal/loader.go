@@ -5,10 +5,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/xo/xo/models"
 	"github.com/gedex/inflector"
 	"github.com/knq/snaker"
-
-	"github.com/xo/xo/models"
 )
 
 // Loader is the common interface for database drivers that can generate code
@@ -156,6 +155,14 @@ func (tl TypeLoader) ParseQuery(args *ArgType) error {
 		Comment: args.QueryTypeComment,
 	}
 
+	nullFields := make(map[string]bool)
+	if args.QueryNullFields != "" {
+		for _, qf := range strings.Split(args.QueryNullFields, ",") {
+			nullField := snaker.CamelToSnake(strings.TrimSpace(qf))
+			nullFields[nullField] = true
+		}
+	}
+
 	if args.QueryFields == "" {
 		// if no query fields specified, then pass to inspector
 		colList, err := tl.QueryColumnList(args, inspect)
@@ -169,7 +176,8 @@ func (tl TypeLoader) ParseQuery(args *ArgType) error {
 				Name: snaker.SnakeToCamelIdentifier(c.ColumnName),
 				Col:  c,
 			}
-			f.Len, f.NilType, f.Type = tl.ParseType(args, c.DataType, args.QueryAllowNulls && !c.NotNull)
+			_, isNullField := nullFields[c.ColumnName]
+			f.Len, f.NilType, f.Type = tl.ParseType(args, c.DataType, (args.QueryAllowNulls && !c.NotNull) || isNullField)
 			typeTpl.Fields = append(typeTpl.Fields, f)
 		}
 	} else {
@@ -588,18 +596,22 @@ func (tl TypeLoader) LoadTableForeignKeys(args *ArgType, tableMap map[string]*Ty
 		return err
 	}
 
+	fieldsColumnsMap := make(map[string]*Field)
+	for _, f := range typeTpl.Fields {
+		fieldsColumnsMap[f.Col.ColumnName] = f
+	}
+
 	// loop over foreign keys for table
-	for _, fk := range foreignKeyList {
+	for i, fk := range foreignKeyList {
 		var refTpl *Type
 		var col, refCol *Field
 
-	colLoop:
-		// find column
-		for _, f := range typeTpl.Fields {
-			if f.Col.ColumnName == fk.ColumnName {
-				col = f
-				break colLoop
-			}
+		col = fieldsColumnsMap[fk.ColumnName]
+
+		startFkIndex := i + 1
+		refs := make([]*Field, len(foreignKeyList)-startFkIndex)
+		for j := startFkIndex; j < len(foreignKeyList); j++ {
+			refs[j-startFkIndex] = fieldsColumnsMap[foreignKeyList[j].ColumnName]
 		}
 
 	refTplLoop:
@@ -637,12 +649,13 @@ func (tl TypeLoader) LoadTableForeignKeys(args *ArgType, tableMap map[string]*Ty
 
 		// create foreign key template
 		fkMap[fk.ForeignKeyName] = &ForeignKey{
-			Schema:     args.Schema,
-			Type:       typeTpl,
-			Field:      col,
-			RefType:    refTpl,
-			RefField:   refCol,
-			ForeignKey: fk,
+			Schema:               args.Schema,
+			Type:                 typeTpl,
+			Field:                col,
+			RefType:              refTpl,
+			RefField:             refCol,
+			ForeignKey:           fk,
+			ForeignKeysForSelect: refs,
 		}
 	}
 

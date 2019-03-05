@@ -33,14 +33,10 @@ func (a *ArgType) ParseQuery(mask string, interpol bool) (string, []*QueryParam)
 	params := []*QueryParam{}
 	i := 1
 	last := 0
+	paramNameIndexMap := make(map[string]int)
 
 	// loop over matches, extracting each placeholder and splitting to name/type
 	for _, m := range matches {
-		// generate place holder value
-		pstr := mask
-		if strings.Contains(mask, "%d") {
-			pstr = fmt.Sprintf(mask, i)
-		}
 
 		// extract parameter info
 		paramStr := a.Query[m[0]+len(dl) : m[1]-len(dl)]
@@ -48,6 +44,18 @@ func (a *ArgType) ParseQuery(mask string, interpol bool) (string, []*QueryParam)
 		param := &QueryParam{
 			Name: p[0],
 			Type: p[1],
+		}
+
+		index, paramAlreadyExists := paramNameIndexMap[param.Name]
+		if !paramAlreadyExists {
+			index = len(params) + 1
+			paramNameIndexMap[param.Name] = index
+		}
+
+		// generate place holder value
+		pstr := mask
+		if strings.Contains(mask, "%d") {
+			pstr = fmt.Sprintf(mask, index)
 		}
 
 		// parse parameter options if present
@@ -81,7 +89,9 @@ func (a *ArgType) ParseQuery(mask string, interpol bool) (string, []*QueryParam)
 			str = str + pstr
 		}
 
-		params = append(params, param)
+		if !paramAlreadyExists {
+			params = append(params, param)
+		}
 		last = m[1]
 		i++
 	}

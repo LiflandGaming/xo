@@ -14,13 +14,11 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/alexflint/go-arg"
-
-	"github.com/xo/dburl"
 	"github.com/xo/xo/internal"
-	"github.com/xo/xo/models"
-
 	_ "github.com/xo/xo/loaders"
+	"github.com/xo/xo/models"
+	"github.com/alexflint/go-arg"
+	"github.com/xo/dburl"
 	_ "github.com/xo/xoutil"
 )
 
@@ -343,11 +341,14 @@ func writeTypes(args *internal.ArgType) error {
 		}
 	}
 
+	if args.GeneratePlainText {
+		return nil
+	}
+
 	// build goimports parameters, closing files
 	params := []string{"-w"}
 	for k, f := range files {
 		params = append(params, k)
-
 		// close
 		err = f.Close()
 		if err != nil {
@@ -356,10 +357,10 @@ func writeTypes(args *internal.ArgType) error {
 	}
 
 	// process written files with goimports
-	output, err := exec.Command("goimports", params...).CombinedOutput()
+	goimportsCmd := exec.Command("goimports", params...)
+	goimportsOut, err := goimportsCmd.CombinedOutput()
 	if err != nil {
-		return errors.New(string(output))
+		return fmt.Errorf("Goimports err %s. Output %s", err.Error(), string(goimportsOut))
 	}
-
 	return nil
 }

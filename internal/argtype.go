@@ -21,6 +21,9 @@ type ArgType struct {
 	// Append toggles to append to the existing types.
 	Append bool `arg:"-a,help:append to existing files"`
 
+	// GeneratePlainText allows to generate plain text output
+	GeneratePlainText bool `arg:"--gen-plain,help:disable golang specific generation. allows to generate plain text files"`
+
 	// Suffix is the output suffix for filenames.
 	Suffix string `arg:"-f,help:output file suffix"`
 
@@ -95,8 +98,13 @@ type ArgType struct {
 	// QueryFields are the fields to scan the result to.
 	QueryFields string `arg:"--query-fields,-Z,help:comma separated list of field names to scan query's results to the query's associated Go type"`
 
+	QueryNullFields string `arg:"--query-null-fields,-R,help:comma separated list of field names to scan as nullable"`
+
 	// QueryAllowNulls indicates that custom query results can contain null types.
 	QueryAllowNulls bool `arg:"--query-allow-nulls,-U,help:use query column NULL state"`
+
+	// QueryAppendMode is the name of table which should be used to get filelds for query materializiation
+	QueryForTable string `arg:"--query-for-table,help:use table to get filelds for query materializiation"`
 
 	// EscapeAll toggles escaping schema, table, and column names in SQL queries.
 	EscapeAll bool `arg:"--escape-all,-X,help:escape all names in SQL queries"`
@@ -158,7 +166,7 @@ func NewDefaultArgs() *ArgType {
 
 	return &ArgType{
 		Suffix:              ".xo.go",
-		Int32Type:           "int",
+		Int32Type:           "int64",
 		Uint32Type:          "uint",
 		ForeignKeyMode:      &fkMode,
 		QueryParamDelimiter: "%%",

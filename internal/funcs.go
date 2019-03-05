@@ -1,39 +1,51 @@
 package internal
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"text/template"
 
-	"github.com/knq/snaker"
-
 	"github.com/xo/xo/models"
+	"github.com/knq/snaker"
 )
 
 // NewTemplateFuncs returns a set of template funcs bound to the supplied args.
 func (a *ArgType) NewTemplateFuncs() template.FuncMap {
 	return template.FuncMap{
-		"colcount":           a.colcount,
-		"colnames":           a.colnames,
-		"colnamesmulti":      a.colnamesmulti,
-		"colnamesquery":      a.colnamesquery,
-		"colnamesquerymulti": a.colnamesquerymulti,
-		"colprefixnames":     a.colprefixnames,
-		"colvals":            a.colvals,
-		"colvalsmulti":       a.colvalsmulti,
-		"fieldnames":         a.fieldnames,
-		"fieldnamesmulti":    a.fieldnamesmulti,
-		"goparamlist":        a.goparamlist,
-		"reniltype":          a.reniltype,
-		"retype":             a.retype,
-		"shortname":          a.shortname,
-		"convext":            a.convext,
-		"schema":             a.schemafn,
-		"colname":            a.colname,
-		"hascolumn":          a.hascolumn,
-		"hasfield":           a.hasfield,
-		"getstartcount":      a.getstartcount,
+		"camel":                   a.camel,
+		"colcount":                a.colcount,
+		"colnames":                a.colnames,
+		"colnamesmulti":           a.colnamesmulti,
+		"colnamesquery":           a.colnamesquery,
+		"colnamesquerymulti":      a.colnamesquerymulti,
+		"colnamesquerywithoffset": a.colnamesquerywithoffset,
+		"colprefixnames":          a.colprefixnames,
+		"colvals":                 a.colvals,
+		"colvalsmulti":            a.colvalsmulti,
+		"fieldnames":              a.fieldnames,
+		"fieldnamesWrapped":       a.fieldnamesWrapped,
+		"fieldnamesmulti":         a.fieldnamesmulti,
+		"fieldnamesmultiWrapped":  a.fieldnamesmultiWrapped,
+		"goparamlist":             a.goparamlist,
+		"goparam":                 a.goparam,
+		"reniltype":               a.reniltype,
+		"retype":                  a.retype,
+		"shortname":               a.shortname,
+		"convext":                 a.convext,
+		"schema":                  a.schemafn,
+		"colname":                 a.colname,
+		"hascolumn":               a.hascolumn,
+		"hasfield":                a.hasfield,
+		"getstartcount":           a.getstartcount,
+		"contains":                a.contains,
+		"updateAssignment":        a.updateAssignment,
+		"updateAssignmentMulti":   a.updateAssignmentMulti,
 	}
+}
+
+func (a *ArgType) camel(typ string) string {
+	return strings.Replace(snaker.ForceLowerCamelIdentifier(typ), "ID", "Id", -1)
 }
 
 // retype checks typ against known types, and prefixing
@@ -223,13 +235,37 @@ func (a *ArgType) colnamesmulti(fields []*Field, ignoreNames []*Field) string {
 	return str
 }
 
-// colnamesquery creates a list of the column names in fields as a query and
-// joined by sep, excluding any Field with Name contained in ignoreNames.
-//
-// Used to create a list of column names in a WHERE clause (ie, "field_1 = $1
-// AND field_2 = $2 AND ...") or in an UPDATE clause (ie, "field = $1, field =
-// $2, ...").
-func (a *ArgType) colnamesquery(fields []*Field, sep string, ignoreNames ...string) string {
+// updateAssignmentMulti creates a list of key=$n, excluding any
+// Field with Name contained in ignoreNames.
+// like: filed_1 = $1, field_2 = $2, ...
+func (a *ArgType) updateAssignmentMulti(fields []*Field, ignoreNames []*Field) string {
+	ignore := map[string]bool{}
+	for _, f := range ignoreNames {
+		ignore[f.Name] = true
+	}
+
+	str := ""
+	i := 0
+	for _, f := range fields {
+		if ignore[f.Name] {
+			continue
+		}
+
+		if i != 0 {
+			str = str + fmt.Sprintf(", ")
+		}
+		str += fmt.Sprintf("%s = %s", a.colname(f.Col), a.Loader.NthParam(i))
+
+		i++
+	}
+
+	return str
+}
+
+// updateAssignment creates a list of key=$n, excluding any
+// Field with Name contained in ignoreNames.
+// like: filed_1 = $1, field_2 = $2, ...
+func (a *ArgType) updateAssignment(fields []*Field, ignoreNames ...string) string {
 	ignore := map[string]bool{}
 	for _, n := range ignoreNames {
 		ignore[n] = true
@@ -243,6 +279,40 @@ func (a *ArgType) colnamesquery(fields []*Field, sep string, ignoreNames ...stri
 		}
 
 		if i != 0 {
+			str = str + ", "
+		}
+		str += fmt.Sprintf("%s = %s", a.colname(f.Col), a.Loader.NthParam(i))
+		i++
+	}
+
+	return str
+}
+
+// colnamesquery creates a list of the column names in fields as a query and
+// joined by sep, excluding any Field with Name contained in ignoreNames.
+//
+// Used to create a list of column names in a WHERE clause (ie, "field_1 = $1
+// AND field_2 = $2 AND ...") or in an UPDATE clause (ie, "field = $1, field =
+// $2, ...").
+func (a *ArgType) colnamesquery(fields []*Field, sep string, ignoreNames ...string) string {
+	return a.colnamesquerywithoffset(fields, sep, 0, ignoreNames...)
+}
+
+// colnamesquerywithoffset does the same as colnamesquery but adds offset value to param number e.g. $(1+offset)
+func (a *ArgType) colnamesquerywithoffset(fields []*Field, sep string, offset int, ignoreNames ...string) string {
+	ignore := map[string]bool{}
+	for _, n := range ignoreNames {
+		ignore[n] = true
+	}
+
+	str := ""
+	i := offset
+	for _, f := range fields {
+		if ignore[f.Name] {
+			continue
+		}
+
+		if i != offset {
 			str = str + sep
 		}
 		str = str + a.colname(f.Col) + " = " + a.Loader.NthParam(i)
@@ -386,7 +456,40 @@ func (a *ArgType) fieldnames(fields []*Field, prefix string, ignoreNames ...stri
 		if i != 0 {
 			str = str + ", "
 		}
-		str = str + prefix + "." + f.Name
+		str = str + f.Type + "(" + prefix + "." + f.Name + ")"
+		i++
+	}
+
+	return str
+}
+
+func (a *ArgType) fieldnamesWrapped(fields []*Field, prefix string, ignoreNames ...string) string {
+	ignore := map[string]bool{}
+	for _, n := range ignoreNames {
+		ignore[n] = true
+	}
+
+	str := ""
+	i := 0
+	for _, f := range fields {
+		if ignore[f.Name] {
+			continue
+		}
+
+		if i != 0 {
+			str = str + ", "
+		}
+
+		t := f.Type
+
+		isPointer := strings.Index(prefix, "&") >= 0
+		if isPointer {
+			str += "(*" + t + ")"
+		} else {
+			str += t
+		}
+
+		str += "(" + prefix + "." + f.Name + ")"
 		i++
 	}
 
@@ -415,6 +518,44 @@ func (a *ArgType) fieldnamesmulti(fields []*Field, prefix string, ignoreNames []
 			str = str + ", "
 		}
 		str = str + prefix + "." + f.Name
+		i++
+	}
+
+	return str
+}
+
+// fieldnamesmulti creates a list of field names from fields of the adding the
+// provided prefix, and excluding any Field with the slice contained in ignoreNames.
+//
+// Used to present a comma separated list of field names, ie in a Go statement
+// (ie, "t.Field1, t.Field2, t.Field3 ...")
+func (a *ArgType) fieldnamesmultiWrapped(fields []*Field, prefix string, ignoreNames []*Field) string {
+	ignore := map[string]bool{}
+	for _, f := range ignoreNames {
+		ignore[f.Name] = true
+	}
+
+	str := ""
+	i := 0
+	for _, f := range fields {
+		if ignore[f.Name] {
+			continue
+		}
+
+		if i != 0 {
+			str = str + ", "
+		}
+
+		t := f.Type
+
+		isPointer := strings.Index(prefix, "&") >= 0
+		if isPointer {
+			str += "(*" + t + ")"
+		} else {
+			str += t
+		}
+
+		str += "(" + prefix + "." + f.Name + ")"
 		i++
 	}
 
@@ -492,6 +633,21 @@ var goReservedNames = map[string]string{
 	"float64":    "f",
 	"complex64":  "c",
 	"complex128": "c128",
+}
+
+func (a *ArgType) goparam(fieldName string) string {
+	s := "field"
+	if len(fieldName) > 0 {
+		n := strings.Split(snaker.CamelToSnake(fieldName), "_")
+		s = strings.ToLower(n[0]) + fieldName[len(n[0]):]
+	}
+
+	// check go reserved names
+	if r, ok := goReservedNames[strings.ToLower(s)]; ok {
+		s = r
+	}
+
+	return s
 }
 
 // goparamlist converts a list of fields into their named Go parameters,
@@ -635,4 +791,14 @@ func (a *ArgType) hasfield(fields []*Field, name string) bool {
 // getstartcount returns a starting count for numbering columsn in queries
 func (a *ArgType) getstartcount(fields []*Field, pkFields []*Field) int {
 	return len(fields) - len(pkFields)
+}
+
+// contains returns true if at lear one row contains target substring
+func (a *ArgType) contains(rows []string, substr string) bool {
+	for _, row := range rows {
+		if strings.Contains(row, substr) {
+			return true
+		}
+	}
+	return false
 }
