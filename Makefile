@@ -24,3 +24,7 @@ push: build
 	else \
 		docker push ${DOCKER_TAG}; docker push ${DOCKER_TAG_LATEST}; \
 	fi \
+
+
+build-binary:
+	GO111MODULE=on go build -o xo
