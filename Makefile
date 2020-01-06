@@ -1,14 +1,30 @@
-REGISTRY := gcr.io/scale-devops-public
+REGISTRY ?= lifegaming
 BINARY := xo
-TAG := $(shell git describe --abbrev=0 --tags)
+TAG ?= $(shell git describe --abbrev=0 --tags 2> /dev/null)
+ifeq ($(TAG),)
+    TAG = ""
+endif
+
 
 BASE_DOCKER_TAG := ${REGISTRY}/${BINARY}
 
 DOCKER_TAG_LATEST := ${BASE_DOCKER_TAG}:latest
 DOCKER_TAG := ${BASE_DOCKER_TAG}:${TAG}
 
-build: 
-	docker build --rm=true -t ${DOCKER_TAG_LATEST} -t ${BUILD_TIMESTAMP} -f Dockerfile .
+build:
+	if [ $(TAG) = "" ]; then \
+		docker build --rm=true -t ${DOCKER_TAG_LATEST} -f Dockerfile . ; \
+	else \
+		docker build --rm=true -t ${DOCKER_TAG_LATEST} -t ${DOCKER_TAG} -f Dockerfile .; \
+	fi \
 
 push: build
-	docker push ${DOCKER_TAG_LATEST}
+	if [ $(TAG) = "" ]; then \
+		docker push ${DOCKER_TAG_LATEST}; \
+	else \
+		docker push ${DOCKER_TAG}; docker push ${DOCKER_TAG_LATEST}; \
+	fi \
+
+
+build-binary:
+	GO111MODULE=on go build -o xo
